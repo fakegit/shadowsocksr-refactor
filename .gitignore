@@ -1,36 +1,20 @@
-*.py[co]
+## Configuration files
+user-config.json
 
-# Packages
-*.egg
-*.egg-info
-dist
-build
-eggs
-parts
-bin
-var
-sdist
-develop-eggs
-.installed.cfg
-
-# Installer logs
-pip-log.txt
-
-# Unit test / coverage reports
-htmlcov
-.coverage*
-.tox
-
-#Translations
-*.mo
-
-#Mr Developer
-.mr.developer.cfg
-
+## Darwin files
 .DS_Store
+
+## IntelliJ files
 .idea
 
-# Ignore user config
-user-config.json
-userapiconfig.py
-usermysql.json
+## Python files
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment
+# use remote interpreter
+
+## Logging files
+*.log
