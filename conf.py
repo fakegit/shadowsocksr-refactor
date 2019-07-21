@@ -31,7 +31,7 @@ def version() -> str:
 #     True:  print logs when developing or debugging locally
 #     False: recording logs when running on the server
 def print_console() -> bool:
-    return True
+    return False
 
 
 # @return:  the path of configuration file (xml)
