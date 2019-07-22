@@ -24,7 +24,7 @@
 
 
 def version() -> str:
-    return 'ShadowsocksR-Refactor [server] v4.0.0 Snapshot at 2019-07-20.'
+    return 'ShadowsocksR-Refactor [server] v4.0.1 Snapshot at 2019-07-22.'
 
 
 # @return:

@@ -8,7 +8,7 @@ Info
 
 |Edition |Change logs |Latest Out |
 |:----- |:------ |:------ |
-|Server |[Change logs](CHANGES) |v4.0.0 Snapshot at 2019-07-20 |
+|Server |[Change logs](CHANGES) |v4.0.1 Snapshot at 2019-07-22 |
 
 Require
 ------

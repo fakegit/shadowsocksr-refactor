@@ -49,6 +49,8 @@ def out(msg, level: int):
     if conf.print_console():
         print(msg)
     else:
+        # set logging level
+        logging.getLogger().setLevel(DEBUG)
         # if running on the server, record logs
         logging.log(level, msg)
 
