@@ -14,15 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from __future__ import absolute_import, division, print_function, \
-    with_statement
-
-import os
-import sys
-import hashlib
-import logging
-
-import common
 from obfsplugin import plain, http_simple, obfs_tls, verify, auth, auth_chain
 
 
@@ -34,16 +25,18 @@ method_supported.update(verify.obfs_map)
 method_supported.update(auth.obfs_map)
 method_supported.update(auth_chain.obfs_map)
 
+
 def mu_protocol():
     return ["auth_aes128_md5", "auth_aes128_sha1", "auth_chain_a"]
+
 
 class server_info(object):
     def __init__(self, data):
         self.data = data
 
+
 class obfs(object):
     def __init__(self, method):
-        method = common.to_str(method)
         self.method = method
         self._method_info = self.get_method_info(method)
         if self._method_info:

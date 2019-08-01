@@ -47,8 +47,6 @@ _chr = chr
 ord = compat_ord
 chr = compat_chr
 
-connect_log = logging.debug
-
 
 def is_not_blank(string: str) -> bool:
     return not is_blank(string)

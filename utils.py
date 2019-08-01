@@ -29,7 +29,7 @@ import exit
 
 def check_file_path(file: str):
     if is_blank(file):
-        exit.error('Blank file path. [arg -> ' + file + ']')
+        exit.error(f'Blank file path. [arg -> {file}]')
 
     if not os.path.exists(file):
         exit.error('Not found file.')

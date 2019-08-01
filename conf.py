@@ -27,18 +27,18 @@ def version() -> str:
     return 'ShadowsocksR-Refactor [server] v4.0.1 Snapshot at 2019-07-22.'
 
 
-# @return:
-#     True:  print logs when developing or debugging locally
-#     False: recording logs when running on the server
-def print_console() -> bool:
-    return False
-
-
-# @return:  the path of configuration file (xml)
-def configuration_path ()-> str:
+# @return:  the path of ssr conf file
+def ssr_conf_path ()-> str:
     # relative path
     # or you can use absolute path
     return 'user-config.json'
+
+
+def logger_init():
+    import logging
+    logging.basicConfig(level=1,
+                        format='%(asctime)s [%(levelname)-8s] :%(lineno)-4d %(filename)-20s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
 
 
 def help_msg() -> str:

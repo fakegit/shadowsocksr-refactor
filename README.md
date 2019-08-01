@@ -8,13 +8,13 @@ Info
 
 |Edition |Change logs |Latest Out |
 |:----- |:------ |:------ |
-|Server |[Change logs](CHANGES) |v4.0.1 Snapshot at 2019-07-22 |
+|Server |[Change logs](CHANGES) |v4.1.0 Snapshot at 2019-08-01 |
 
 Require
 ------
 
 * Python 3.6+
-* Linux / Darwin
+* Linux && Require 'epoll' model
 
 Usage
 ------
