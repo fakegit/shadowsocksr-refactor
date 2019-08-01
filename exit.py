@@ -22,7 +22,7 @@
 
 import sys
 # -- import from shadowsockesr-v
-import logger
+import logging
 
 
 def ok():
@@ -32,5 +32,5 @@ def ok():
 def error(*msgs):
     if msgs:
         for msg in msgs:
-            logger.error(msg)
+            logging.error(msg)
     sys.exit(1)

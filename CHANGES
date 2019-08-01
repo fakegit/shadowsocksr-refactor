@@ -1,8 +1,13 @@
+v4.1.0 Snapshot at 2019-08-01
+ - Simplify code and configuration parameters.
+ - Use single port instead of multiple ports.
+      :: meaningless that use multiple ports for personal versions.
+
 v4.0.1 Snapshot at 2019-07-22
  - Fix running without logs.
 
 v4.0.0 Snapshot at 2019-07-20
- - Refactor from branch 'manyuser' and simplified code.
+ - Refactor from branch 'manyuser' and simplify code.
  - Split service and local edition.
      :: Service edition only support 'posix'(Linux/Darwin).
  - Python 2.x deprecated. Use 3.6+ instead.

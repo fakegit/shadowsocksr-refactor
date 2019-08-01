@@ -29,7 +29,7 @@ import exit
 
 def check_file_path(file: str):
     if is_blank(file):
-        exit.error('Blank file path. [arg -> ' + file + ']')
+        exit.error(f'Blank file path. [arg -> {file}]')
 
     if not os.path.exists(file):
         exit.error('Not found file.')
@@ -37,6 +37,8 @@ def check_file_path(file: str):
 
 def parse_json(file: str) -> Dict:
     import json
+
+    check_file_path(file)
 
     d = {}
     with open(file=file, encoding='utf-8') as f:

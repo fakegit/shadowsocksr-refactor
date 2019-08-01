@@ -59,10 +59,6 @@
 # `client`  means UDP clients that connects to other servers
 # `server`  means the UDP server that handles user requests
 
-from __future__ import absolute_import, division, print_function, \
-    with_statement
-
-import time
 import socket
 import logging
 import struct
@@ -70,9 +66,8 @@ import errno
 import random
 import binascii
 import traceback
-import threading
 
-import encrypt, obfs, eventloop, lru_cache, common, shell
+import encrypt, obfs, eventloop, lru_cache, common
 from common import pre_parse_header, parse_header, pack_addr
 
 # for each handler, we have 2 stream directions:
@@ -130,8 +125,6 @@ def client_key(source_addr, server_af):
 class UDPRelay(object):
     def __init__(self, config, dns_resolver, is_local, stat_callback=None, stat_counter=None):
         self._config = config
-        if config.get('connect_verbose_info', 0) > 0:
-            common.connect_log = logging.info
         if is_local:
             self._listen_addr = config['local_address']
             self._listen_port = config['local_port']
@@ -462,7 +455,7 @@ class UDPRelay(object):
             if not data:
                 return
         except Exception as e:
-            shell.print_exception(e)
+            logging.error(e)
             logging.error("exception from user %d" % (user_id,))
 
         try:
@@ -470,7 +463,7 @@ class UDPRelay(object):
             self.add_transfer_u(client_uid, len(data))
             if client_pair is None: # new request
                 addr, port = client.getsockname()[:2]
-                common.connect_log('UDP data to %s(%s):%d from %s:%d by user %d' %
+                logging.info('UDP data to %s(%s):%d from %s:%d by user %d' %
                         (common.to_str(remote_addr[0]), common.to_str(server_addr), server_port, addr, port, user_id))
         except IOError as e:
             err = eventloop.errno_from_exception(e)
@@ -478,7 +471,7 @@ class UDPRelay(object):
             if err in (errno.EINPROGRESS, errno.EAGAIN):
                 pass
             else:
-                shell.print_exception(e)
+                logging.error(e)
 
     def _handle_client(self, sock):
         data, r_addr = sock.recvfrom(BUF_SIZE)
@@ -561,7 +554,7 @@ class UDPRelay(object):
             if error_no in (errno.EWOULDBLOCK,):
                 pass
             else:
-                shell.print_exception(e)
+                logging.error(e)
                 return False
         #if uncomplete and data is not None and retry < 3:
         #    self._data_to_write_to_server_socket.append([(data, addr), retry])
@@ -605,8 +598,8 @@ class UDPRelay(object):
             try:
                 self._handle_server()
             except Exception as e:
-                shell.print_exception(e)
-                if self._config['verbose']:
+                logging.error(e)
+                if self._config['debug']:
                     traceback.print_exc()
         elif sock and (fd in self._sockets):
             if event & eventloop.POLL_ERR:
@@ -614,7 +607,7 @@ class UDPRelay(object):
             try:
                 self._handle_client(sock)
             except Exception as e:
-                shell.print_exception(e)
+                logging.error(e)
                 if self._config['verbose']:
                     traceback.print_exc()
         else:

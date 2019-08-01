@@ -20,13 +20,17 @@
  under the License.
 """
 
-import os
 import sys
+import select
 
 
 def check_os():
-    if 'posix' != os.name:
-        print(' Note: Only support \'posix\'(Linux/Darwin).')
+    if 'linux' != sys.platform:
+        print(' Note: Only support Linux.')
+        sys.exit(1)
+
+    if not hasattr(select, 'epoll'):
+        print(' Note: Require \'epoll\' model.')
         sys.exit(1)
 
 

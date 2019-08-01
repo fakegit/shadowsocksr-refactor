@@ -18,18 +18,14 @@
 # from ssloop
 # https://github.com/clowwindy/ssloop
 
-from __future__ import absolute_import, division, print_function, \
-    with_statement
-
 import os
 import time
 import socket
 import select
 import errno
+# -- import from shadowsockesr-v
 import logging
-from collections import defaultdict
-
-import shell
+import exit
 
 
 __all__ = ['EventLoop', 'POLL_NULL', 'POLL_IN', 'POLL_OUT', 'POLL_ERR',
@@ -56,111 +52,20 @@ EVENT_NAMES = {
 TIMEOUT_PRECISION = 2
 
 
-class KqueueLoop(object):
-
-    MAX_EVENTS = 1024
-
-    def __init__(self):
-        self._kqueue = select.kqueue()
-        self._fds = {}
-
-    def _control(self, fd, mode, flags):
-        events = []
-        if mode & POLL_IN:
-            events.append(select.kevent(fd, select.KQ_FILTER_READ, flags))
-        if mode & POLL_OUT:
-            events.append(select.kevent(fd, select.KQ_FILTER_WRITE, flags))
-        for e in events:
-            self._kqueue.control([e], 0)
-
-    def poll(self, timeout):
-        if timeout < 0:
-            timeout = None  # kqueue behaviour
-        events = self._kqueue.control(None, KqueueLoop.MAX_EVENTS, timeout)
-        results = defaultdict(lambda: POLL_NULL)
-        for e in events:
-            fd = e.ident
-            if e.filter == select.KQ_FILTER_READ:
-                results[fd] |= POLL_IN
-            elif e.filter == select.KQ_FILTER_WRITE:
-                results[fd] |= POLL_OUT
-        return results.items()
-
-    def register(self, fd, mode):
-        self._fds[fd] = mode
-        self._control(fd, mode, select.KQ_EV_ADD)
-
-    def unregister(self, fd):
-        self._control(fd, self._fds[fd], select.KQ_EV_DELETE)
-        del self._fds[fd]
-
-    def modify(self, fd, mode):
-        self.unregister(fd)
-        self.register(fd, mode)
-
-    def close(self):
-        self._kqueue.close()
-
-
-class SelectLoop(object):
-
-    def __init__(self):
-        self._r_list = set()
-        self._w_list = set()
-        self._x_list = set()
-
-    def poll(self, timeout):
-        r, w, x = select.select(self._r_list, self._w_list, self._x_list,
-                                timeout)
-        results = defaultdict(lambda: POLL_NULL)
-        for p in [(r, POLL_IN), (w, POLL_OUT), (x, POLL_ERR)]:
-            for fd in p[0]:
-                results[fd] |= p[1]
-        return results.items()
-
-    def register(self, fd, mode):
-        if mode & POLL_IN:
-            self._r_list.add(fd)
-        if mode & POLL_OUT:
-            self._w_list.add(fd)
-        if mode & POLL_ERR:
-            self._x_list.add(fd)
-
-    def unregister(self, fd):
-        if fd in self._r_list:
-            self._r_list.remove(fd)
-        if fd in self._w_list:
-            self._w_list.remove(fd)
-        if fd in self._x_list:
-            self._x_list.remove(fd)
-
-    def modify(self, fd, mode):
-        self.unregister(fd)
-        self.register(fd, mode)
-
-    def close(self):
-        pass
-
-
 class EventLoop(object):
     def __init__(self):
+        # only support Linux and require 'epoll' model.
         if hasattr(select, 'epoll'):
             self._impl = select.epoll()
-            model = 'epoll'
-        elif hasattr(select, 'kqueue'):
-            self._impl = KqueueLoop()
-            model = 'kqueue'
-        elif hasattr(select, 'select'):
-            self._impl = SelectLoop()
-            model = 'select'
+            logging.info('Using event model: epoll.')
         else:
-            raise Exception('can not find any available functions in select '
-                            'package')
+            exit.error('only support Linux and require \'epoll\' model.')
+
         self._fdmap = {}  # (f, handler)
         self._last_time = time.time()
         self._periodic_callbacks = []
         self._stopping = False
-        logging.debug('using event model: %s', model)
+
 
     def poll(self, timeout=None):
         events = self._impl.poll(timeout)
@@ -220,7 +125,7 @@ class EventLoop(object):
                     try:
                         handle = handler.handle_event(sock, fd, event) or handle
                     except (OSError, IOError) as e:
-                        shell.print_exception(e)
+                        logging.error(e)
             now = time.time()
             if asap or now - self._last_time >= TIMEOUT_PRECISION:
                 for callback in self._periodic_callbacks:
