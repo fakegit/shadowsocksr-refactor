@@ -1,19 +1,26 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
-#
-# Copyright 2013-2015 clowwindy
-#
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
+# -*- coding:utf-8 -*-
+
+"""
+ @author: clowwindy
+ @modify: valor.
+ @file: eventloop.py
+
+ Copyright 2013-2015 clowwindy
+ Copyright 2019 valord577
+
+ Licensed under the Apache License, Version 2.0 (the "License"); you may
+ not use this file except in compliance with the License. You may obtain
+ a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions and limitations
+ under the License.
+"""
 
 # from ssloop
 # https://github.com/clowwindy/ssloop
@@ -27,9 +34,6 @@ import errno
 import logging
 import exit
 
-
-__all__ = ['EventLoop', 'POLL_NULL', 'POLL_IN', 'POLL_OUT', 'POLL_ERR',
-           'POLL_HUP', 'POLL_NVAL', 'EVENT_NAMES']
 
 POLL_NULL = 0x00
 POLL_IN = 0x01
@@ -59,7 +63,7 @@ class EventLoop(object):
             self._impl = select.epoll()
             logging.info('Using event model: epoll.')
         else:
-            exit.error('only support Linux and require \'epoll\' model.')
+            exit.error('Only support Linux and require \'epoll\' model.')
 
         self._fdmap = {}  # (f, handler)
         self._last_time = time.time()

@@ -1,3 +1,6 @@
+v4.1.1 Snapshot at 2019-08-21
+ - Configuring dns server via parsing json instead of '/etc/resolv.conf'.
+
 v4.1.0 Snapshot at 2019-08-01
  - Simplify code and configuration parameters.
  - Use single port instead of multiple ports.

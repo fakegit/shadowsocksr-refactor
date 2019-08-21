@@ -72,6 +72,30 @@ def to_str(s: bytes):
     return s
 
 
+# @return False if str is not a ipv4
+# @return bytes if str is a ipv4
+def is_ipv4(ip: str):
+    if ip is None:
+        return False
+
+    try:
+        return socket.inet_pton(socket.AF_INET, ip)
+    except:
+        return False
+
+
+# @return False if str is not a ipv6
+# @return bytes if str is a ipv6
+def is_ipv6(ip: str):
+    if ip is None:
+        return False
+
+    try:
+        return socket.inet_pton(socket.AF_INET6, ip)
+    except:
+        return False
+
+
 def int32(x):
     if x > 0xFFFFFFFF or x < 0:
         x &= 0xFFFFFFFF

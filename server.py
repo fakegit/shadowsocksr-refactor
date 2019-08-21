@@ -28,7 +28,11 @@ def main():
     # -- import from shadowsockesr-v
     import conf
     import exit
-    import shell, eventloop, tcprelay, udprelay, asyncdns, common
+    import shell
+    import eventloop
+    import tcprelay
+    import udprelay
+    import asyncdns
 
     # -- init logging --
     conf.logger_init()
@@ -48,6 +52,7 @@ def main():
     protocol_param = ssr_conf['protocol_param']
     obfs = ssr_conf['obfs']
     obfs_param = ssr_conf['obfs_param']
+    dns_list = ssr_conf['dns']
 
     logging.info(f'Server start with '
                  f'password [{password}] '
@@ -66,7 +71,7 @@ def main():
         ssr_conf['out_bindv6'] = ''
 
         # dns server
-        dns_resolver = asyncdns.DNSResolver()
+        dns_resolver = asyncdns.DNSResolver(dns_list)
 
         stat_counter_dict = {}
         # listen tcp

@@ -4,7 +4,7 @@
 """
  @author: clowwindy
  @modify: valor.
- @file: shell.py
+ @file: asyncdns.py
 
  Copyright 2014-2015 clowwindy
  Copyright 2019 valord577
@@ -27,6 +27,8 @@ import socket
 import struct
 import re
 import logging
+from typing import List
+# -- import from shadowsockesr-v
 import common, lru_cache, eventloop
 
 CACHE_SWEEP_INTERVAL = 30
@@ -263,80 +265,26 @@ STATUS_IPV6 = 1
 
 class DNSResolver(object):
 
-    def __init__(self):
+    def __init__(self, dns_list: List):
         self._loop = None
-        self._hosts = {}
+        # local host
+        self._hosts = {"localhost": "127.0.0.1"}
         self._hostname_status = {}
         self._hostname_to_cb = {}
         self._cb_to_hostname = {}
         self._cache = lru_cache.LRUCache(timeout=300)
         self._sock = None
+        # dns servers
         self._servers = []
+        self.__parse_resolv(dns_list)
 
-        self._parse_resolv()
-        self._parse_hosts()
-        # TODO monitor hosts change and reload hosts
-        # TODO parse /etc/gai.conf and follow its rules
-
-    def _parse_resolv(self):
-        if not self._servers:
-            try:
-                with open('/etc/resolv.conf', 'r') as f:
-                    content = f.readlines()
-                    for line in content:
-                        line = line.strip()
-                        if not line:
-                            continue
-
-                        if not line.startswith('nameserver'):
-                            continue
-
-                        parts = line.split()
-                        if not len(parts) < 2:
-                            continue
-
-                        server = parts[1]
-                        if common.is_ip(server) == socket.AF_INET:
-                            self._servers.append((server, 53))
-            except IOError:
-                pass
-        # insert default dns
-        if not self._servers:
-            self._servers = [('8.8.4.4', 53), ('8.8.8.8', 53)]
-        logging.info('dns server: %s' % (self._servers,))
-
-    def _parse_hosts(self):
-        try:
-            with open('/etc/hosts', 'r') as f:
-                content = f.readlines()
-                for line in content:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    __index = line.find('#')
-                    if __index == 0:
-                        continue
-
-                    if __index > 0:
-                        line = line[:__index]
-                    parts = line.split()
-                    if not len(parts) < 2:
-                        continue
-
-                    ip = parts[0]
-                    if not common.is_ip(ip):
-                        continue
-
-                    for i in range(1, len(parts)):
-                        hostname = parts[i]
-                        if hostname:
-                            self._hosts[hostname] = ip
-        except IOError:
-            pass
-        # insert default host
-        if not self._hosts:
-            self._hosts['localhost'] = '127.0.0.1'
+    def __parse_resolv(self, dns_list: List):
+        # insert dns server
+        for dns in dns_list:
+            host = dns['host']
+            port = dns['port']
+            self._servers.append((host, port), )
+            logging.info(f"dns server: {host}:{port}")
 
     def add_to_loop(self, loop):
         if self._loop:

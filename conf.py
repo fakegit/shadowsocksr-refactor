@@ -24,11 +24,11 @@
 
 
 def version() -> str:
-    return 'ShadowsocksR-Refactor [server] v4.1.0 Snapshot at 2019-08-01.'
+    return 'ShadowsocksR-Refactor [server] v4.1.1 Snapshot at 2019-08-21'
 
 
 # @return:  the path of ssr conf file
-def ssr_conf_path ()-> str:
+def ssr_conf_path() -> str:
     # relative path
     # or you can use absolute path
     return 'user-config.json'

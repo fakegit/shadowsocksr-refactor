@@ -61,6 +61,16 @@ def get_ssr_conf(ssr_conf_path: str) -> Dict:
     if common.is_blank(obfs):
         exit.error('Require \'obfs\'.')
 
+    dns_list = _ssr_conf.get('dns')
+    if dns_list is None or type(dns_list) != list or len(dns_list) == 0:
+        exit.error('Require \'dns server\'.')
+    for dns in dns_list:
+        host = dns.get('host')
+        if ':' in host:
+            exit.error("Not support ipv6 dns host.")
+        if not common.is_ipv4(host):
+            exit.error("Illegal ipv4 dns host.")
+
     # -- default params --
     _ssr_conf['server'] = '::'
     _ssr_conf['password'] = common.to_bytes(_ssr_conf['password'])
