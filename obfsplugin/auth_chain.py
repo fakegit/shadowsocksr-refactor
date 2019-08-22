@@ -1,37 +1,49 @@
-#!/usr/bin/env python
-#
-# Copyright 2015-2015 breakwa11
-#
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
+#!/usr/bin/python
+# -*- coding:utf-8 -*-
 
-import os
-import logging
-import binascii
+"""
+ @author: clowwindy
+ @modify: valor.
+ @file: auth_chain.py
+
+ Copyright 2015-2015 breakwa11
+ Copyright 2019 valord577
+
+ Licensed under the Apache License, Version 2.0 (the "License"); you may
+ not use this file except in compliance with the License. You may obtain
+ a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions and limitations
+ under the License.
+"""
+
 import base64
-import time
-import random
-import math
-import struct
-import hmac
-import hashlib
+import binascii
 import bisect
+import hashlib
+import hmac
+import logging
+import math
+import os
+import random
+import struct
+import time
 
-import common, lru_cache, encrypt
+import common
+import encrypt
+import lru_cache
+from common import to_bytes
 from obfsplugin import plain
-from common import to_bytes, to_str, ord, chr
+
 
 def create_auth_chain_a(method):
     return auth_chain_a(method)
+
 
 def create_auth_chain_b(method):
     return auth_chain_b(method)
@@ -238,7 +250,6 @@ class auth_chain_a(auth_base):
         self.pack_id = 1
         self.recv_id = 1
         self.user_id = None
-        self.user_id_num = 0
         self.user_key = None
         self.overhead = 4
         self.client_over_head = 4
@@ -464,20 +475,8 @@ class auth_chain_a(auth_base):
                 return (b'', False)
 
             self.last_client_hash = md5data
-            uid = struct.unpack('<I', self.recv_buf[12:16])[0] ^ struct.unpack('<I', md5data[8:12])[0]
-            self.user_id_num = uid
-            uid = struct.pack('<I', uid)
-            if uid in self.server_info.users:
-                self.user_id = uid
-                self.user_key = self.server_info.users[uid]
-                self.server_info.update_user_func(uid)
-            else:
-                self.user_id_num = 0
-                if not self.server_info.users:
-                    self.user_key = self.server_info.key
-                else:
-                    self.user_key = self.server_info.recv_iv
 
+            self.user_key = self.server_info.key
             md5data = hmac.new(self.user_key, self.recv_buf[12 : 12 + 20], self.hashfunc).digest()
             if md5data[:4] != self.recv_buf[32:36]:
                 logging.error('%s data uncorrect auth HMAC-MD5 from %s:%d, data %s' % (self.no_compatible_method, self.server_info.client, self.server_info.client_port, binascii.hexlify(self.recv_buf)))

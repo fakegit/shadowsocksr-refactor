@@ -30,17 +30,17 @@ import time
 import socket
 import select
 import errno
-# -- import from shadowsockesr-v
 import logging
+# -- import from shadowsockesr-v
 import exit
 
 
 POLL_NULL = 0x00
-POLL_IN = 0x01
-POLL_OUT = 0x04
-POLL_ERR = 0x08
-POLL_HUP = 0x10
-POLL_NVAL = 0x20
+POLL_IN = select.EPOLLIN
+POLL_OUT = select.EPOLLOUT
+POLL_ERR = select.EPOLLERR
+POLL_HUP = select.EPOLLHUP
+POLL_NVAL = select.POLLNVAL
 
 
 EVENT_NAMES = {
@@ -56,11 +56,20 @@ EVENT_NAMES = {
 TIMEOUT_PRECISION = 2
 
 
-class EventLoop(object):
+class EventLoop:
+
+    _instance = None
+
+    # singleton
+    def __new__(cls):
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
         # only support Linux and require 'epoll' model.
         if hasattr(select, 'epoll'):
-            self._impl = select.epoll()
+            self.epoll = select.epoll()
             logging.info('Using event model: epoll.')
         else:
             exit.error('Only support Linux and require \'epoll\' model.')
@@ -70,24 +79,23 @@ class EventLoop(object):
         self._periodic_callbacks = []
         self._stopping = False
 
-
     def poll(self, timeout=None):
-        events = self._impl.poll(timeout)
+        events = self.epoll.poll(timeout)
         return [(self._fdmap[fd][0], fd, event) for fd, event in events]
 
-    def add(self, f, mode, handler):
-        fd = f.fileno()
-        self._fdmap[fd] = (f, handler)
-        self._impl.register(fd, mode)
+    def add(self, socks, mode, handler):
+        fd = socks.fileno()
+        self._fdmap[fd] = (socks, handler)
+        self.epoll.register(fd, mode)
 
-    def remove(self, f):
-        fd = f.fileno()
+    def remove(self, socks):
+        fd = socks.fileno()
         del self._fdmap[fd]
-        self._impl.unregister(fd)
+        self.epoll.unregister(fd)
 
     def removefd(self, fd):
         del self._fdmap[fd]
-        self._impl.unregister(fd)
+        self.epoll.unregister(fd)
 
     def add_periodic(self, callback):
         self._periodic_callbacks.append(callback)
@@ -97,7 +105,7 @@ class EventLoop(object):
 
     def modify(self, f, mode):
         fd = f.fileno()
-        self._impl.modify(fd, mode)
+        self.epoll.modify(fd, mode)
 
     def stop(self):
         self._stopping = True
@@ -139,7 +147,7 @@ class EventLoop(object):
                 time.sleep(0.001)
 
     def __del__(self):
-        self._impl.close()
+        self.epoll.close()
 
 
 # from tornado

@@ -76,6 +76,7 @@ def get_ssr_conf(ssr_conf_path: str) -> Dict:
     _ssr_conf['password'] = common.to_bytes(_ssr_conf['password'])
     _ssr_conf['protocol_param'] = _ssr_conf.get('protocol_param', '')
     _ssr_conf['obfs_param'] = _ssr_conf.get('obfs_param', '')
+    _ssr_conf['udp_enable'] = _ssr_conf.get('udp_enable', False)
 
     # process default data
     try:

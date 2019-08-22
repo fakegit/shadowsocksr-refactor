@@ -263,10 +263,18 @@ STATUS_IPV4 = 0
 STATUS_IPV6 = 1
 
 
-class DNSResolver(object):
+class DNSResolver:
+
+    _instance = None
+
+    # singleton
+    def __new__(cls, dns_list: List):
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(self, dns_list: List):
-        self._loop = None
+        self._event_loop = None
         # local host
         self._hosts = {"localhost": "127.0.0.1"}
         self._hostname_status = {}
@@ -284,18 +292,17 @@ class DNSResolver(object):
             host = dns['host']
             port = dns['port']
             self._servers.append((host, port), )
-            logging.info(f"dns server: {host}:{port}")
+            logging.info(f"dns server: [{host}]:{port}")
 
     def add_to_loop(self, loop):
-        if self._loop:
-            raise Exception('already add to loop')
-        self._loop = loop
-        # TODO when dns server is IPv6
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-                                   socket.SOL_UDP)
-        self._sock.setblocking(False)
-        loop.add(self._sock, eventloop.POLL_IN, self)
-        loop.add_periodic(self.handle_periodic)
+        if self._event_loop:
+            logging.warning("DNSResolver already has been added to loop.")
+        else:
+            self._event_loop = loop
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.SOL_UDP)
+            self._sock.setblocking(False)
+            loop.add(self._sock, eventloop.POLL_IN, self)
+            loop.add_periodic(self.handle_periodic)
 
     def _call_callback(self, hostname, ip, error=None):
         callbacks = self._hostname_to_cb.get(hostname, [])
@@ -356,13 +363,13 @@ class DNSResolver(object):
             return
         if event & eventloop.POLL_ERR:
             logging.error('dns socket err')
-            self._loop.remove(self._sock)
+            self._event_loop.remove(self._sock)
             self._sock.close()
             # TODO when dns server is IPv6
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
                                        socket.SOL_UDP)
             self._sock.setblocking(False)
-            self._loop.add(self._sock, eventloop.POLL_IN, self)
+            self._event_loop.add(self._sock, eventloop.POLL_IN, self)
         else:
             data, addr = sock.recvfrom(1024)
             if addr not in self._servers:
@@ -440,9 +447,9 @@ class DNSResolver(object):
 
     def close(self):
         if self._sock:
-            if self._loop:
-                self._loop.remove_periodic(self.handle_periodic)
-                self._loop.remove(self._sock)
+            if self._event_loop:
+                self._event_loop.remove_periodic(self.handle_periodic)
+                self._event_loop.remove(self._sock)
             self._sock.close()
             self._sock = None
 

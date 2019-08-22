@@ -1,3 +1,8 @@
+v4.1.2 Snapshot at 2019-08-22
+ - Simplify code and add comments.
+ - Deprecate multi-user models and speed limited.
+      :: meaningless that use multi-user models and speed limited for personal versions.
+
 v4.1.1 Snapshot at 2019-08-21
  - Configuring dns server via parsing json instead of '/etc/resolv.conf'.
 

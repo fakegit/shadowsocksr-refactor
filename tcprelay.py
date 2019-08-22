@@ -1,30 +1,40 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
-#
-# Copyright 2015 clowwindy
-#
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
+# -*- coding:utf-8 -*-
 
-import time
-import socket
-import errno
-import struct
-import logging
+"""
+ @author: clowwindy
+ @modify: valor.
+ @file: tcprelay.py
+
+ Copyright 2015 clowwindy
+ Copyright 2019 valord577
+
+ Licensed under the Apache License, Version 2.0 (the "License"); you may
+ not use this file except in compliance with the License. You may obtain
+ a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions and limitations
+ under the License.
+"""
+
 import binascii
-import traceback
+import errno
+import logging
 import random
+import socket
+import struct
+import traceback
 
-import encrypt, obfs, eventloop, shell, common, lru_cache
+import common
+import encrypt
+import eventloop
+import lru_cache
+import obfs
 from common import pre_parse_header, parse_header
 
 # we clear at most TIMEOUTS_CLEAN_SIZE timeouts each time
@@ -83,42 +93,16 @@ STREAM_DOWN = 1
 WAIT_STATUS_INIT = 0
 WAIT_STATUS_READING = 1
 WAIT_STATUS_WRITING = 2
-WAIT_STATUS_READWRITING = WAIT_STATUS_READING | WAIT_STATUS_WRITING
+WAIT_STATUS_READ_WRITING = WAIT_STATUS_READING | WAIT_STATUS_WRITING
 
 NETWORK_MTU = 1500
 TCP_MSS = NETWORK_MTU - 40
 BUF_SIZE = 32 * 1024
 UDP_MAX_BUF_SIZE = 65536
 
-class SpeedTester(object):
-    def __init__(self, max_speed = 0):
-        self.max_speed = max_speed * 1024
-        self.last_time = time.time()
-        self.sum_len = 0
-
-    def update_limit(self, max_speed):
-        self.max_speed = max_speed * 1024
-
-    def add(self, data_len):
-        if self.max_speed > 0:
-            cut_t = time.time()
-            self.sum_len -= (cut_t - self.last_time) * self.max_speed
-            if self.sum_len < 0:
-                self.sum_len = 0
-            self.last_time = cut_t
-            self.sum_len += data_len
-
-    def isExceed(self):
-        if self.max_speed > 0:
-            cut_t = time.time()
-            self.sum_len -= (cut_t - self.last_time) * self.max_speed
-            if self.sum_len < 0:
-                self.sum_len = 0
-            self.last_time = cut_t
-            return self.sum_len >= self.max_speed
-        return False
 
 class TCPRelayHandler(object):
+
     def __init__(self, server, fd_to_handlers, loop, local_sock, config,
                  dns_resolver):
         self._server = server
@@ -139,8 +123,6 @@ class TCPRelayHandler(object):
 
         self._client_address = local_sock.getpeername()[:2]
         self._accept_address = local_sock.getsockname()[:2]
-        self._user = None
-        self._user_id = server._listen_port
         self._update_tcp_mss(local_sock)
 
         # TCP Relay works as either sslocal or ssserver
@@ -155,8 +137,6 @@ class TCPRelayHandler(object):
         server_info = obfs.server_info(server.obfs_data)
         server_info.host = config['server']
         server_info.port = server._listen_port
-        #server_info.users = server.server_users
-        #server_info.update_user_func = self._update_user
         server_info.client = self._client_address[0]
         server_info.client_port = self._client_address[1]
         server_info.protocol_param = ''
@@ -174,8 +154,6 @@ class TCPRelayHandler(object):
         server_info = obfs.server_info(server.protocol_data)
         server_info.host = config['server']
         server_info.port = server._listen_port
-        server_info.users = server.server_users
-        server_info.update_user_func = self._update_user
         server_info.client = self._client_address[0]
         server_info.client_port = self._client_address[1]
         server_info.protocol_param = config['protocol_param']
@@ -212,8 +190,6 @@ class TCPRelayHandler(object):
         self._server.add_connection(1)
         self._server.stat_add(self._client_address[0], 1)
         self._add_ref = 1
-        self.speed_tester_u = SpeedTester(config.get("speed_limit_per_con", 0))
-        self.speed_tester_d = SpeedTester(config.get("speed_limit_per_con", 0))
         self._recv_u_max_size = BUF_SIZE
         self._recv_d_max_size = BUF_SIZE
         self._recv_pack_id = 0
@@ -264,15 +240,6 @@ class TCPRelayHandler(object):
         except Exception:
             self._stage = STAGE_DESTROYED
             logging.error('create encryptor fail at port %d', self._server._listen_port)
-
-    def _update_user(self, user):
-        self._user = user
-        self._user_id = struct.unpack('<I', user)[0]
-        if self._user in self._server.server_users_cfg:
-            cfg = self._server.server_users_cfg[self._user]
-            speed = cfg.get('speed_limit_per_con', 0)
-            self.speed_tester_u.update_limit(speed)
-            self.speed_tester_d.update_limit(speed)
 
     def _update_activity(self, data_len=0):
         # tell the TCP Relay we have activities recently
@@ -368,7 +335,7 @@ class TCPRelayHandler(object):
             try:
                 if self._encrypt_correct:
                     if sock == self._remote_sock:
-                        self._server.add_transfer_u(self._user, len(data))
+                        self._server.server_transfer_ul += len(data)
                 self._update_activity(len(data))
                 if data:
                     l = len(data)
@@ -424,15 +391,15 @@ class TCPRelayHandler(object):
                 self._remote_sock_v6.sendto(data, (server_addr, remote_addr[1]))
                 if self._udpv6_send_pack_id == 0:
                     addr, port = self._remote_sock_v6.getsockname()[:2]
-                    logging.info('UDPv6 sendto %s(%s):%d from %s:%d by user %d' %
-                        (common.to_str(remote_addr[0]), common.to_str(server_addr), remote_addr[1], addr, port, self._user_id))
+                    logging.info('UDPv6 sendto %s(%s):%d from %s:%d' %
+                        (common.to_str(remote_addr[0]), common.to_str(server_addr), remote_addr[1], addr, port))
                 self._udpv6_send_pack_id += 1
             else:
                 self._remote_sock.sendto(data, (server_addr, remote_addr[1]))
                 if self._udp_send_pack_id == 0:
                     addr, port = self._remote_sock.getsockname()[:2]
-                    logging.info('UDP sendto %s(%s):%d from %s:%d by user %d' %
-                        (common.to_str(remote_addr[0]), common.to_str(server_addr), remote_addr[1], addr, port, self._user_id))
+                    logging.info('UDP sendto %s(%s):%d from %s:%d' %
+                        (common.to_str(remote_addr[0]), common.to_str(server_addr), remote_addr[1], addr, port))
                 self._udp_send_pack_id += 1
             return True
         except Exception as e:
@@ -511,7 +478,7 @@ class TCPRelayHandler(object):
             return ("0.0.0.0", 0)
 
     def _handel_protocol_error(self, client_address, ogn_data):
-        logging.warn("Protocol ERROR, TCP ogn data %s from %s:%d via port %d by UID %d" % (binascii.hexlify(ogn_data), client_address[0], client_address[1], self._server._listen_port, self._user_id))
+        logging.warning("Protocol ERROR, TCP ogn data %s from %s:%d via port %d" % (binascii.hexlify(ogn_data), client_address[0], client_address[1], self._server._listen_port))
         self._encrypt_correct = False
         #create redirect or disconnect by hash code
         host, port = self._get_redirect_host(client_address, ogn_data)
@@ -523,47 +490,8 @@ class TCPRelayHandler(object):
         return data + ogn_data
 
     def _handle_stage_connecting(self, data):
-        if self._is_local:
-            if self._encryptor is not None:
-                data = self._protocol.client_pre_encrypt(data)
-                data = self._encryptor.encrypt(data)
-                data = self._obfs.client_encode(data)
         if data:
             self._data_to_write_to_remote.append(data)
-        if self._is_local and not self._fastopen_connected and \
-                self._config['fast_open']:
-            # for sslocal and fastopen, we basically wait for data and use
-            # sendto to connect
-            try:
-                # only connect once
-                self._fastopen_connected = True
-                remote_sock = \
-                    self._create_remote_socket(self._chosen_server[0],
-                                               self._chosen_server[1])
-                self._loop.add(remote_sock, eventloop.POLL_ERR, self._server)
-                data = b''.join(self._data_to_write_to_remote)
-                l = len(data)
-                s = remote_sock.sendto(data, MSG_FASTOPEN, self._chosen_server)
-                if s < l:
-                    data = data[s:]
-                    self._data_to_write_to_remote = [data]
-                else:
-                    self._data_to_write_to_remote = []
-                self._update_stream(STREAM_UP, WAIT_STATUS_READWRITING)
-            except (OSError, IOError) as e:
-                if eventloop.errno_from_exception(e) == errno.EINPROGRESS:
-                    # in this case data is not sent at all
-                    self._update_stream(STREAM_UP, WAIT_STATUS_READWRITING)
-                elif eventloop.errno_from_exception(e) == errno.ENOTCONN:
-                    logging.error('fast open not supported on this OS')
-                    self._config['fast_open'] = False
-                    self.destroy()
-                else:
-                    logging.error(e)
-                    if self._config['debug']:
-                        traceback.print_exc()
-                    logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
-                    self.destroy()
 
     def _get_head_size(self, buf, def_value):
         if len(buf) < 2:
@@ -579,89 +507,43 @@ class TCPRelayHandler(object):
 
     def _handle_stage_addr(self, ogn_data, data):
         try:
-            if self._is_local:
-                cmd = common.ord(data[1])
-                if cmd == CMD_UDP_ASSOCIATE:
-                    logging.debug('UDP associate')
-                    if self._local_sock.family == socket.AF_INET6:
-                        header = b'\x05\x00\x00\x04'
-                    else:
-                        header = b'\x05\x00\x00\x01'
-                    addr, port = self._local_sock.getsockname()[:2]
-                    addr_to_send = socket.inet_pton(self._local_sock.family,
-                                                    addr)
-                    port_to_send = struct.pack('>H', port)
-                    self._write_to_sock(header + addr_to_send + port_to_send,
-                                        self._local_sock)
-                    self._stage = STAGE_UDP_ASSOC
-                    # just wait for the client to disconnect
-                    return
-                elif cmd == CMD_CONNECT:
-                    # just trim VER CMD RSV
-                    data = data[3:]
-                else:
-                    logging.error('invalid command %d', cmd)
-                    self.destroy()
-                    return
+            data = pre_parse_header(data)
+            if data is None:
+                data = self._handel_protocol_error(self._client_address, ogn_data)
+            header_result = parse_header(data)
+            if header_result is not None:
+                try:
+                    common.to_str(header_result[2])
+                except Exception as e:
+                    header_result = None
+            if header_result is None:
+                data = self._handel_protocol_error(self._client_address, ogn_data)
+                header_result = parse_header(data)
+            self._overhead = self._obfs.get_overhead(self._is_local) + self._protocol.get_overhead(self._is_local)
+            self._recv_buffer_size = BUF_SIZE - self._overhead
+            server_info = self._obfs.get_server_info()
+            server_info.buffer_size = self._recv_buffer_size
+            server_info = self._protocol.get_server_info()
+            server_info.buffer_size = self._recv_buffer_size
 
-            before_parse_data = data
-            if self._is_local:
-                header_result = parse_header(data)
-            else:
-                data = pre_parse_header(data)
-                if data is None:
-                    data = self._handel_protocol_error(self._client_address, ogn_data)
-                header_result = parse_header(data)
-                if header_result is not None:
-                    try:
-                        common.to_str(header_result[2])
-                    except Exception as e:
-                        header_result = None
-                if header_result is None:
-                    data = self._handel_protocol_error(self._client_address, ogn_data)
-                    header_result = parse_header(data)
-                self._overhead = self._obfs.get_overhead(self._is_local) + self._protocol.get_overhead(self._is_local)
-                self._recv_buffer_size = BUF_SIZE - self._overhead
-                server_info = self._obfs.get_server_info()
-                server_info.buffer_size = self._recv_buffer_size
-                server_info = self._protocol.get_server_info()
-                server_info.buffer_size = self._recv_buffer_size
             connecttype, addrtype, remote_addr, remote_port, header_length = header_result
             if connecttype != 0:
                 pass
-                #common.connect_log('UDP over TCP by user %d' %
-                #        (self._user_id, ))
             else:
-                logging.info('TCP request %s:%d by user %d' %
-                        (common.to_str(remote_addr), remote_port, self._user_id))
+                logging.info('TCP request %s:%d' %
+                        (common.to_str(remote_addr), remote_port))
             self._remote_address = (common.to_str(remote_addr), remote_port)
             self._remote_udp = (connecttype != 0)
             # pause reading
             self._update_stream(STREAM_UP, WAIT_STATUS_WRITING)
             self._stage = STAGE_DNS
-            if self._is_local:
-                # forward address to remote
-                self._write_to_sock((b'\x05\x00\x00\x01'
-                                     b'\x00\x00\x00\x00\x10\x10'),
-                                    self._local_sock)
-                head_len = self._get_head_size(data, 30)
-                self._obfs.obfs.server_info.head_len = head_len
-                self._protocol.obfs.server_info.head_len = head_len
-                if self._encryptor is not None:
-                    data = self._protocol.client_pre_encrypt(data)
-                    data_to_send = self._encryptor.encrypt(data)
-                    data_to_send = self._obfs.client_encode(data_to_send)
-                if data_to_send:
-                    self._data_to_write_to_remote.append(data_to_send)
-                # notice here may go into _handle_dns_resolved directly
-                self._dns_resolver.resolve(self._chosen_server[0],
-                                           self._handle_dns_resolved)
-            else:
-                if len(data) > header_length:
-                    self._data_to_write_to_remote.append(data[header_length:])
-                # notice here may go into _handle_dns_resolved directly
-                self._dns_resolver.resolve(remote_addr,
-                                           self._handle_dns_resolved)
+
+            if len(data) > header_length:
+                self._data_to_write_to_remote.append(data[header_length:])
+            # notice here may go into _handle_dns_resolved directly
+            self._dns_resolver.resolve(remote_addr,
+                                       self._handle_dns_resolved)
+
         except Exception as e:
             self._log_error(e)
             if self._config['debug']:
@@ -702,15 +584,15 @@ class TCPRelayHandler(object):
             if self._forbidden_iplist:
                 if common.to_str(sa[0]) in self._forbidden_iplist:
                     if self._remote_address:
-                        raise Exception('IP %s is in forbidden list, when connect to %s:%d via port %d by UID %d' %
-                            (common.to_str(sa[0]), self._remote_address[0], self._remote_address[1], self._server._listen_port, self._user_id))
+                        raise Exception('IP %s is in forbidden list, when connect to %s:%d via port %d' %
+                            (common.to_str(sa[0]), self._remote_address[0], self._remote_address[1], self._server._listen_port))
                     raise Exception('IP %s is in forbidden list, reject' %
                                     common.to_str(sa[0]))
             if self._forbidden_portset:
                 if sa[1] in self._forbidden_portset:
                     if self._remote_address:
-                        raise Exception('Port %d is in forbidden list, when connect to %s:%d via port %d by UID %d' %
-                            (sa[1], self._remote_address[0], self._remote_address[1], self._server._listen_port, self._user_id))
+                        raise Exception('Port %d is in forbidden list, when connect to %s:%d via port %d' %
+                            (sa[1], self._remote_address[0], self._remote_address[1], self._server._listen_port))
                     raise Exception('Port %d is in forbidden list, reject' % sa[1])
         remote_sock = socket.socket(af, socktype, proto)
         self._remote_sock = remote_sock
@@ -728,13 +610,13 @@ class TCPRelayHandler(object):
         if self._remote_udp:
             remote_sock_v6.setblocking(False)
 
-            if not self._is_local:
-                self._socket_bind_addr(remote_sock, af)
-                self._socket_bind_addr(remote_sock_v6, af)
+            self._socket_bind_addr(remote_sock, af)
+            self._socket_bind_addr(remote_sock_v6, af)
+
         else:
             remote_sock.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
-            if not self._is_local:
-                self._socket_bind_addr(remote_sock, af)
+            self._socket_bind_addr(remote_sock, af)
+
         return remote_sock
 
     def _handle_dns_resolved(self, result, error):
@@ -748,55 +630,45 @@ class TCPRelayHandler(object):
                 try:
                     self._stage = STAGE_CONNECTING
                     remote_addr = ip
-                    if self._is_local:
-                        remote_port = self._chosen_server[1]
-                    else:
-                        remote_port = self._remote_address[1]
+                    remote_port = self._remote_address[1]
 
-                    if self._is_local and self._config['fast_open']:
-                        # for fastopen:
-                        # wait for more data to arrive and send them in one SYN
-                        self._stage = STAGE_CONNECTING
-                        # we don't have to wait for remote since it's not
-                        # created
-                        self._update_stream(STREAM_UP, WAIT_STATUS_READING)
-                        # TODO when there is already data in this packet
-                    else:
-                        # else do connect
-                        remote_sock = self._create_remote_socket(remote_addr,
-                                                                 remote_port)
-                        if self._remote_udp:
-                            self._loop.add(remote_sock,
+                    # else do connect
+                    remote_sock = self._create_remote_socket(remote_addr,
+                                                             remote_port)
+                    if self._remote_udp:
+                        self._loop.add(remote_sock,
+                                       eventloop.POLL_IN,
+                                       self._server)
+                        if self._remote_sock_v6:
+                            self._loop.add(self._remote_sock_v6,
                                            eventloop.POLL_IN,
                                            self._server)
-                            if self._remote_sock_v6:
-                                self._loop.add(self._remote_sock_v6,
-                                        eventloop.POLL_IN,
-                                        self._server)
-                        else:
-                            try:
-                                remote_sock.connect((remote_addr, remote_port))
-                            except (OSError, IOError) as e:
-                                if eventloop.errno_from_exception(e) in (errno.EINPROGRESS,
-                                        errno.EWOULDBLOCK):
-                                    pass # always goto here
-                                else:
-                                    raise e
-                            addr, port = self._remote_sock.getsockname()[:2]
-                            logging.info('TCP connecting %s(%s):%d from %s:%d by user %d' %
-                                (common.to_str(self._remote_address[0]), common.to_str(remote_addr), remote_port, addr, port, self._user_id))
+                    else:
+                        try:
+                            remote_sock.connect((remote_addr, remote_port))
+                        except (OSError, IOError) as e:
+                            if eventloop.errno_from_exception(e) in (errno.EINPROGRESS,
+                                                                     errno.EWOULDBLOCK):
+                                pass  # always goto here
+                            else:
+                                raise e
+                        addr, port = self._remote_sock.getsockname()[:2]
+                        logging.info('TCP connecting %s(%s):%d from %s:%d' %
+                                     (common.to_str(self._remote_address[0]), common.to_str(remote_addr), remote_port,
+                                      addr, port))
 
-                            self._loop.add(remote_sock,
+                        self._loop.add(remote_sock,
                                        eventloop.POLL_ERR | eventloop.POLL_OUT,
                                        self._server)
-                        self._stage = STAGE_CONNECTING
-                        self._update_stream(STREAM_UP, WAIT_STATUS_READWRITING)
-                        self._update_stream(STREAM_DOWN, WAIT_STATUS_READING)
-                        if self._remote_udp:
-                            while self._data_to_write_to_remote:
-                                data = self._data_to_write_to_remote[0]
-                                del self._data_to_write_to_remote[0]
-                                self._write_to_sock(data, self._remote_sock)
+                    self._stage = STAGE_CONNECTING
+                    self._update_stream(STREAM_UP, WAIT_STATUS_READ_WRITING)
+                    self._update_stream(STREAM_DOWN, WAIT_STATUS_READING)
+                    if self._remote_udp:
+                        while self._data_to_write_to_remote:
+                            data = self._data_to_write_to_remote[0]
+                            del self._data_to_write_to_remote[0]
+                            self._write_to_sock(data, self._remote_sock)
+
                     return
                 except Exception as e:
                     logging.error(e)
@@ -827,11 +699,8 @@ class TCPRelayHandler(object):
         # each stage
         if not self._local_sock:
             return
-        is_local = self._is_local
-        if is_local:
-            recv_buffer_size = self._get_read_size(self._local_sock, self._recv_buffer_size, True)
-        else:
-            recv_buffer_size = BUF_SIZE
+        recv_buffer_size = BUF_SIZE
+
         data = None
         try:
             data = self._local_sock.recv(recv_buffer_size)
@@ -843,27 +712,46 @@ class TCPRelayHandler(object):
             self.destroy()
             return
 
-        self.speed_tester_u.add(len(data))
-        self._server.speed_tester_u(self._user_id).add(len(data))
         ogn_data = data
-        if not is_local:
-            if self._encryptor is not None:
-                if self._encrypt_correct:
+        if self._encryptor is not None:
+            if self._encrypt_correct:
+                try:
+                    obfs_decode = self._obfs.server_decode(data)
+                    if self._stage == STAGE_INIT:
+                        self._overhead = self._obfs.get_overhead(self._is_local) + self._protocol.get_overhead(self._is_local)
+                        server_info = self._protocol.get_server_info()
+                        server_info.overhead = self._overhead
+                except Exception as e:
+                    logging.error(e)
+                    logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
+                    self.destroy()
+                    return
+                if obfs_decode[2]:
+                    data = self._obfs.server_encode(b'')
                     try:
-                        obfs_decode = self._obfs.server_decode(data)
-                        if self._stage == STAGE_INIT:
-                            self._overhead = self._obfs.get_overhead(self._is_local) + self._protocol.get_overhead(self._is_local)
-                            server_info = self._protocol.get_server_info()
-                            server_info.overhead = self._overhead
+                        self._write_to_sock(data, self._local_sock)
                     except Exception as e:
                         logging.error(e)
+                        if self._config['debug']:
+                            traceback.print_exc()
                         logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
                         self.destroy()
                         return
-                    if obfs_decode[2]:
-                        data = self._obfs.server_encode(b'')
+                if obfs_decode[1]:
+                    if not self._protocol.obfs.server_info.recv_iv:
+                        iv_len = len(self._protocol.obfs.server_info.iv)
+                        self._protocol.obfs.server_info.recv_iv = obfs_decode[0][:iv_len]
+                    data = self._encryptor.decrypt(obfs_decode[0])
+                else:
+                    data = obfs_decode[0]
+                try:
+                    data, sendback = self._protocol.server_post_decrypt(data)
+                    if sendback:
+                        backdata = self._protocol.server_pre_encrypt(b'')
+                        backdata = self._encryptor.encrypt(backdata)
+                        backdata = self._obfs.server_encode(backdata)
                         try:
-                            self._write_to_sock(data, self._local_sock)
+                            self._write_to_sock(backdata, self._local_sock)
                         except Exception as e:
                             logging.error(e)
                             if self._config['debug']:
@@ -871,52 +759,21 @@ class TCPRelayHandler(object):
                             logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
                             self.destroy()
                             return
-                    if obfs_decode[1]:
-                        if not self._protocol.obfs.server_info.recv_iv:
-                            iv_len = len(self._protocol.obfs.server_info.iv)
-                            self._protocol.obfs.server_info.recv_iv = obfs_decode[0][:iv_len]
-                        data = self._encryptor.decrypt(obfs_decode[0])
-                    else:
-                        data = obfs_decode[0]
-                    try:
-                        data, sendback = self._protocol.server_post_decrypt(data)
-                        if sendback:
-                            backdata = self._protocol.server_pre_encrypt(b'')
-                            backdata = self._encryptor.encrypt(backdata)
-                            backdata = self._obfs.server_encode(backdata)
-                            try:
-                                self._write_to_sock(backdata, self._local_sock)
-                            except Exception as e:
-                                logging.error(e)
-                                if self._config['debug']:
-                                    traceback.print_exc()
-                                logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
-                                self.destroy()
-                                return
-                    except Exception as e:
-                        logging.error(e)
-                        logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
-                        self.destroy()
-                        return
-            else:
-                return
-            if not data:
-                return
+                except Exception as e:
+                    logging.error(e)
+                    logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
+                    self.destroy()
+                    return
+        else:
+            return
+        if not data:
+            return
+
         if self._stage == STAGE_STREAM:
-            if self._is_local:
-                if self._encryptor is not None:
-                    data = self._protocol.client_pre_encrypt(data)
-                    data = self._encryptor.encrypt(data)
-                    data = self._obfs.client_encode(data)
             self._write_to_sock(data, self._remote_sock)
-        elif is_local and self._stage == STAGE_INIT:
-            # TODO check auth method
-            self._write_to_sock(b'\x05\00', self._local_sock)
-            self._stage = STAGE_ADDR
         elif self._stage == STAGE_CONNECTING:
             self._handle_stage_connecting(data)
-        elif (is_local and self._stage == STAGE_ADDR) or \
-                (not is_local and self._stage == STAGE_INIT):
+        elif self._stage == STAGE_INIT:
             self._handle_stage_addr(ogn_data, data)
 
     def _on_remote_read(self, is_remote_sock):
@@ -939,10 +796,8 @@ class TCPRelayHandler(object):
                 data = struct.pack('>H', size) + data
                 #logging.info('UDP over TCP recvfrom %s:%d %d bytes to %s:%d' % (addr[0], addr[1], len(data), self._client_address[0], self._client_address[1]))
             else:
-                if self._is_local:
-                    recv_buffer_size = BUF_SIZE
-                else:
-                    recv_buffer_size = self._get_read_size(self._remote_sock, self._recv_buffer_size, False)
+                recv_buffer_size = self._get_read_size(self._remote_sock, self._recv_buffer_size, False)
+
                 data = self._remote_sock.recv(recv_buffer_size)
                 self._recv_pack_id += 1
         except (OSError, IOError) as e:
@@ -953,40 +808,14 @@ class TCPRelayHandler(object):
             self.destroy()
             return
 
-        self.speed_tester_d.add(len(data))
-        self._server.speed_tester_d(self._user_id).add(len(data))
         if self._encryptor is not None:
-            if self._is_local:
-                try:
-                    obfs_decode = self._obfs.client_decode(data)
-                except Exception as e:
-                    logging.error(e)
-                    logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
-                    self.destroy()
-                    return
-                if obfs_decode[1]:
-                    send_back = self._obfs.client_encode(b'')
-                    self._write_to_sock(send_back, self._remote_sock)
-                if not self._protocol.obfs.server_info.recv_iv:
-                    iv_len = len(self._protocol.obfs.server_info.iv)
-                    self._protocol.obfs.server_info.recv_iv = obfs_decode[0][:iv_len]
-                data = self._encryptor.decrypt(obfs_decode[0])
-                try:
-                    data = self._protocol.client_post_decrypt(data)
-                    if self._recv_pack_id == 1:
-                        self._tcp_mss = self._protocol.get_server_info().tcp_mss
-                except Exception as e:
-                    logging.error(e)
-                    logging.error("exception from %s:%d" % (self._client_address[0], self._client_address[1]))
-                    self.destroy()
-                    return
-            else:
-                if self._encrypt_correct:
-                    data = self._protocol.server_pre_encrypt(data)
-                    data = self._encryptor.encrypt(data)
-                    data = self._obfs.server_encode(data)
-                    self._server.add_transfer_d(self._user, len(data))
-                self._update_activity(len(data))
+            if self._encrypt_correct:
+                data = self._protocol.server_pre_encrypt(data)
+                data = self._encryptor.encrypt(data)
+                data = self._obfs.server_encode(data)
+                self._server.server_transfer_dl += len(data)
+            self._update_activity(len(data))
+
         else:
             return
         try:
@@ -1042,19 +871,13 @@ class TCPRelayHandler(object):
         if self._stage == STAGE_DESTROYED:
             logging.debug('ignore handle_event: destroyed')
             return True
-        if self._user is not None and self._user not in self._server.server_users:
-            self.destroy()
-            return True
         if fd == self._remote_sock_fd or fd == self._remotev6_sock_fd:
             if event & eventloop.POLL_ERR:
                 handle = True
                 self._on_remote_error()
             elif event & (eventloop.POLL_IN | eventloop.POLL_HUP):
-                if not self.speed_tester_d.isExceed() and not self._server.speed_tester_d(self._user_id).isExceed():
-                    handle = True
-                    self._on_remote_read(sock == self._remote_sock)
-                else:
-                    self._recv_d_max_size = self._tcp_mss - self._overhead
+                handle = True
+                self._on_remote_read(sock == self._remote_sock)
             elif event & eventloop.POLL_OUT:
                 handle = True
                 self._on_remote_write()
@@ -1063,11 +886,8 @@ class TCPRelayHandler(object):
                 handle = True
                 self._on_local_error()
             elif event & (eventloop.POLL_IN | eventloop.POLL_HUP):
-                if not self.speed_tester_u.isExceed() and not self._server.speed_tester_u(self._user_id).isExceed():
-                    handle = True
-                    self._on_local_read()
-                else:
-                    self._recv_u_max_size = self._tcp_mss - self._overhead
+                handle = True
+                self._on_local_read()
             elif event & eventloop.POLL_OUT:
                 handle = True
                 self._on_local_write()
@@ -1162,23 +982,17 @@ class TCPRelayHandler(object):
             self._server.add_connection(-1)
             self._server.stat_add(self._client_address[0], -1)
 
-class TCPRelay(object):
+
+class TCPRelay:
+
     def __init__(self, config, dns_resolver, stat_callback=None, stat_counter=None):
         self._config = config
-        self._is_local = False
         self._dns_resolver = dns_resolver
         self._closed = False
-        self._eventloop = None
+        self._event_loop = None
         self._fd_to_handlers = {}
         self.server_transfer_ul = 0
         self.server_transfer_dl = 0
-        self.server_users = {}
-        self.server_users_cfg = {}
-        self.server_user_transfer_ul = {}
-        self.server_user_transfer_dl = {}
-        self.mu = False
-        self._speed_tester_u = {}
-        self._speed_tester_d = {}
         self.server_connections = 0
         self.protocol_data = obfs.obfs(config['protocol']).init_data()
         self.obfs_data = obfs.obfs(config['obfs']).init_data()
@@ -1208,14 +1022,14 @@ class TCPRelay(object):
         self._stat_callback = stat_callback
 
     def add_to_loop(self, loop):
-        if self._eventloop:
+        if self._event_loop:
             raise Exception('already add to loop')
         if self._closed:
             raise Exception('already closed')
-        self._eventloop = loop
-        self._eventloop.add(self._server_socket,
+        self._event_loop = loop
+        self._event_loop.add(self._server_socket,
                             eventloop.POLL_IN | eventloop.POLL_ERR, self)
-        self._eventloop.add_periodic(self.handle_periodic)
+        self._event_loop.add_periodic(self.handle_periodic)
 
     def remove_handler(self, client):
         if hash(client) in self._timeout_cache:
@@ -1224,52 +1038,6 @@ class TCPRelay(object):
     def add_connection(self, val):
         self.server_connections += val
         logging.debug('server port %5d connections = %d' % (self._listen_port, self.server_connections,))
-
-    def get_ud(self):
-        return (self.server_transfer_ul, self.server_transfer_dl)
-
-    def get_users_ud(self):
-        return (self.server_user_transfer_ul.copy(), self.server_user_transfer_dl.copy())
-
-    def add_transfer_u(self, user, transfer):
-        if user is None:
-            self.server_transfer_ul += transfer
-        else:
-            if user not in self.server_user_transfer_ul:
-                self.server_user_transfer_ul[user] = 0
-            self.server_user_transfer_ul[user] += transfer + self.server_transfer_ul
-            self.server_transfer_ul = 0
-
-    def add_transfer_d(self, user, transfer):
-        if user is None:
-            self.server_transfer_dl += transfer
-        else:
-            if user not in self.server_user_transfer_dl:
-                self.server_user_transfer_dl[user] = 0
-            self.server_user_transfer_dl[user] += transfer + self.server_transfer_dl
-            self.server_transfer_dl = 0
-
-    def speed_tester_u(self, uid):
-        if uid not in self._speed_tester_u:
-            if self.mu: #TODO
-                self._speed_tester_u[uid] = SpeedTester(self._config.get("speed_limit_per_user", 0))
-            else:
-                self._speed_tester_u[uid] = SpeedTester(self._config.get("speed_limit_per_user", 0))
-        return self._speed_tester_u[uid]
-
-    def speed_tester_d(self, uid):
-        if uid not in self._speed_tester_d:
-            if self.mu: #TODO
-                self._speed_tester_d[uid] = SpeedTester(self._config.get("speed_limit_per_user", 0))
-            else:
-                self._speed_tester_d[uid] = SpeedTester(self._config.get("speed_limit_per_user", 0))
-        return self._speed_tester_d[uid]
-
-    def update_limit(self, uid, max_speed):
-        if uid in self._speed_tester_u:
-            self._speed_tester_u[uid].update_limit(max_speed)
-        if uid in self._speed_tester_d:
-            self._speed_tester_d[uid].update_limit(max_speed)
 
     def update_stat(self, port, stat_dict, val):
         newval = stat_dict.get(0, 0) + val
@@ -1340,7 +1108,7 @@ class TCPRelay(object):
                 logging.debug('accept')
                 conn = self._server_socket.accept()
                 handler = TCPRelayHandler(self, self._fd_to_handlers,
-                                self._eventloop, conn[0], self._config,
+                                self._event_loop, conn[0], self._config,
                                 self._dns_resolver)
                 if handler.stage() == STAGE_DESTROYED:
                     conn[0].close()
@@ -1364,7 +1132,7 @@ class TCPRelay(object):
                     logging.warn('unknown fd')
                     handle = True
                     try:
-                        self._eventloop.removefd(fd)
+                        self._event_loop.removefd(fd)
                     except Exception as e:
                         logging.error(e)
                     sock.close()
@@ -1381,7 +1149,7 @@ class TCPRelay(object):
     def handle_periodic(self):
         if self._closed:
             if self._server_socket:
-                self._eventloop.removefd(self._server_socket_fd)
+                self._event_loop.removefd(self._server_socket_fd)
                 self._server_socket.close()
                 self._server_socket = None
                 logging.info('closed TCP port %d', self._listen_port)
@@ -1393,9 +1161,9 @@ class TCPRelay(object):
         logging.debug('TCP close')
         self._closed = True
         if not next_tick:
-            if self._eventloop:
-                self._eventloop.remove_periodic(self.handle_periodic)
-                self._eventloop.removefd(self._server_socket_fd)
+            if self._event_loop:
+                self._event_loop.remove_periodic(self.handle_periodic)
+                self._event_loop.removefd(self._server_socket_fd)
             self._server_socket.close()
             for handler in list(self._fd_to_handlers.values()):
                 handler.destroy()

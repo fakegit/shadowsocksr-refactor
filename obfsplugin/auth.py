@@ -1,34 +1,45 @@
-#!/usr/bin/env python
-#
-# Copyright 2015-2015 breakwa11
-#
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
+#!/usr/bin/python
+# -*- coding:utf-8 -*-
 
-import os
-import logging
-import binascii
+"""
+ @author: clowwindy
+ @modify: valor.
+ @file: auth.py
+
+ Copyright 2015-2015 breakwa11
+ Copyright 2019 valord577
+
+ Licensed under the Apache License, Version 2.0 (the "License"); you may
+ not use this file except in compliance with the License. You may obtain
+ a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions and limitations
+ under the License.
+"""
+
 import base64
-import time
-import random
-import math
-import struct
-import zlib
-import hmac
+import binascii
 import hashlib
+import hmac
+import logging
+import math
+import os
+import random
+import struct
+import time
+import zlib
 
-import common, lru_cache, encrypt
+import common
+import encrypt
+import lru_cache
+from common import to_bytes
 from obfsplugin import plain
-from common import to_bytes, to_str, ord, chr
+
 
 def create_auth_sha1_v4(method):
     return auth_sha1_v4(method)
@@ -653,16 +664,7 @@ class auth_aes128_sha1(auth_base):
                     return (b'', False)
                 return self.not_match_return(self.recv_buf)
 
-            uid = self.recv_buf[7:11]
-            if uid in self.server_info.users:
-                self.user_id = uid
-                self.user_key = self.hashfunc(self.server_info.users[uid]).digest()
-                self.server_info.update_user_func(uid)
-            else:
-                if not self.server_info.users:
-                    self.user_key = self.server_info.key
-                else:
-                    self.user_key = self.server_info.recv_iv
+            self.user_key = self.server_info.key
             encryptor = encrypt.Encryptor(to_bytes(base64.b64encode(self.user_key)) + self.salt, 'aes-128-cbc')
             head = encryptor.decrypt(b'\x00' * 16 + self.recv_buf[11:27] + b'\x00') # need an extra byte or recv empty
             length = struct.unpack('<H', head[12:14])[0]
@@ -765,16 +767,8 @@ class auth_aes128_sha1(auth_base):
         return buf + hmac.new(user_key, buf, self.hashfunc).digest()[:4]
 
     def server_udp_post_decrypt(self, buf):
-        uid = buf[-8:-4]
-        if uid in self.server_info.users:
-            user_key = self.hashfunc(self.server_info.users[uid]).digest()
-        else:
-            uid = None
-            if not self.server_info.users:
-                user_key = self.server_info.key
-            else:
-                user_key = self.server_info.recv_iv
+        user_key = self.server_info.key
         if hmac.new(user_key, buf[:-4], self.hashfunc).digest()[:4] != buf[-4:]:
             return (b'', None)
-        return (buf[:-8], uid)
+        return (buf[:-8], None)
 

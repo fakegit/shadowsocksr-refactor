@@ -52,6 +52,7 @@ def main():
     protocol_param = ssr_conf['protocol_param']
     obfs = ssr_conf['obfs']
     obfs_param = ssr_conf['obfs_param']
+    udp_enable = ssr_conf['udp_enable']
     dns_list = ssr_conf['dns']
 
     logging.info(f'Server start with '
@@ -70,21 +71,24 @@ def main():
         ssr_conf['out_bind'] = ''
         ssr_conf['out_bindv6'] = ''
 
-        # dns server
+        # create epoll (singleton)
+        loop = eventloop.EventLoop()
+
+        # dns server (singleton)
         dns_resolver = asyncdns.DNSResolver(dns_list)
+        dns_resolver.add_to_loop(loop)
 
         stat_counter_dict = {}
-        # listen tcp
+        # listen tcp && register socket
         tcp = tcprelay.TCPRelay(ssr_conf, dns_resolver, stat_counter=stat_counter_dict)
-        # listen udp
-        udp = udprelay.UDPRelay(ssr_conf, dns_resolver, False, stat_counter=stat_counter_dict)
-
-        loop = eventloop.EventLoop()
-        dns_resolver.add_to_loop(loop)
         tcp.add_to_loop(loop)
-        udp.add_to_loop(loop)
 
-        # run socket
+        if udp_enable:
+            # listen udp && register socket
+            udp = udprelay.UDPRelay(ssr_conf, dns_resolver, False, stat_counter=stat_counter_dict)
+            udp.add_to_loop(loop)
+
+        # run epoll to handle socket
         loop.run()
     except Exception as e:
         exit.error(e)

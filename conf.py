@@ -24,7 +24,7 @@
 
 
 def version() -> str:
-    return 'ShadowsocksR-Refactor [server] v4.1.1 Snapshot at 2019-08-21'
+    return 'ShadowsocksR-Refactor [server] v4.1.2 Snapshot at 2019-08-22'
 
 
 # @return:  the path of ssr conf file
