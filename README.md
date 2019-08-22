@@ -6,9 +6,9 @@ A fast tunnel proxy that helps you bypass firewalls.
 Info
 ------
 
-|Edition |Change logs |Latest Out |
-|:----- |:------ |:------ |
-|Server |[Change logs](CHANGES) |v4.1.2 Snapshot at 2019-08-22 |
+|Edition |Change logs |
+|:----- |:------ |
+|Server |[Change logs](CHANGES) |
 
 Require
 ------
